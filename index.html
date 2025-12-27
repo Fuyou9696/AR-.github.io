@@ -4,8 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>扫码播放对应AR视频</title>
-    <!-- 基础库文件：路径对应根目录的js文件 -->
-    <script src="./aframe.min.js"></script>
+    <!-- 在这里添加缓存控制和错误提示代码 -->
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <script>
+        // 资源加载错误时弹出提示，方便定位问题
+        window.addEventListener('error', (e) => {
+        console.log('资源加载失败：', e.target.src);
+        alert('资源加载失败：' + e.target.src);
+        });
+        <!-- 基础库文件：路径对应根目录的js文件 -->
+        <script src="./aframe.min.js"></script>
     <script src="./mindar-image-aframe.prod.js"></script>
     <style>
         /* 当前识别视频的声音按钮：默认隐藏，识别后显示 */
