@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>扫码播放对应AR视频</title>
+    <!-- 缓存控制：避免加载旧文件 -->
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <!-- 基础库文件：路径对应GitHub根目录的js文件 -->
+    <script src="./aframe.min.js"></script>
+    <script src="./mindar-image-aframe.prod.js"></script>
+    <style>
+        /* 手动启动AR按钮样式 */
+        #startARBtn {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 9999;
+            padding: 20px 40px;
+            font-size: 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            touch-action: manipulation;
+        }
+        /* 当前识别视频的声音按钮：默认隐藏，识别后显示 */
+        #currentSoundBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            padding: 12px 20px;
+            background: rgba(0,0,0,0.7);
+            color: #ffffff;
+            border: none;
+            border-radius: 30px;
+            font-size: 16px;
+            touch-action: manipulation;
+            display: none;
+        }
+        /* 未识别时隐藏视频平面 */
+        [mindar-image-target] a-plane {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        /* 识别到目标后显示对应视频 */
+        [mindar-image-target].active a-plane {
+            opacity: 1;
+        }
+    </style>
+    <script>
+        // 资源加载错误提示：快速定位路径问题
+        window.addEventListener('error', (e) => {
+        console.log('资源加载失败：', e.target.src);
+        alert('资源加载失败：' + e.target.src);
+        });
+    </script>
+</head>
+<body>
+    <!-- 1. 手动启动AR按钮（初始显示） -->
+    <button id="startARBtn">点击启动AR扫描</button>
+
+    <!-- 2. 声音控制按钮（默认隐藏） -->
+    <button id="currentSoundBtn" onclick="toggleCurrentSound()">开启当前声音</button>
+
+    <!-- 3. AR主场景（初始隐藏，点击启动后显示） -->
+    <a-scene id="mainARScene"
+             vr-mode-ui="enabled: false"
+             device-orientation-permission-ui="enabled: false"
+             style="display: none;"></a-scene>
+
+    <script>
+        // ########## 核心配置区：新增AR只需在这里加一行 ##########
+        const arConfigList = [
+        { id: 1, videoSrc: './ar000/asset0.mp4', mindSrc: './ar000/targets.mind', width: 1.736, height: 0.976 },
+        { id: 2, videoSrc: './ar001/asset0.mp4', mindSrc: './ar001/targets.mind', width: 1.736, height: 0.976 },
+        { id: 3, videoSrc: './ar002/asset0.mp4', mindSrc: './ar002/targets.mind', width: 1.736, height: 0.976 },
+        { id: 4, videoSrc: './ar003/asset0.mp4', mindSrc: './ar003/targets.mind', width: 1.736, height: 0.976 },
+        // 新增AR示例：{ id: 5, videoSrc: './ar004/asset0.mp4', mindSrc: './ar004/targets.mind', width: 1.736, height: 0.976 },
+        ];
+
+        // 全局变量
+        let currentActiveVideo = null; // 当前识别的视频
+        let isSoundOn = false;         // 当前声音状态
+        const videoMap = {};           // 存储所有视频元素
+
+        // 页面加载完成后初始化
+        window.onload = function() {
+        const mainScene = document.getElementById('mainARScene');
+        const soundBtn = document.getElementById('currentSoundBtn');
+
+        // 循环创建每个AR的独立识别场景
+        arConfigList.forEach(config => {
+        // 1. 创建独立的MindAR实体
+        const arEntity = document.createElement('a-entity');
+        arEntity.setAttribute('mindar-image', `imageTargetSrc: ${config.mindSrc}; autoStart: false; detectThreshold: 0.6`);
+        mainScene.appendChild(arEntity);
+
+        // 2. 创建视频资源
+        const assets = document.createElement('a-assets');
+        const video = document.createElement('video');
+        video.id = `video-${config.id}`;
+        video.src = config.videoSrc;
+        video.loop = true;
+        video.muted = true; // 默认静音
+        video.setAttribute('ontouchstart', () => toggleSingleVideo(config.id)); // 点击视频控音
+        assets.appendChild(video);
+        arEntity.appendChild(assets);
+        videoMap[config.id] = video;
+
+        // 3. 创建相机
+        const camera = document.createElement('a-camera');
+        camera.setAttribute('look-controls', 'enabled: false');
+        camera.setAttribute('cursor', 'fuse: false; rayOrigin: mouse');
+        arEntity.appendChild(camera);
+
+        // 4. 创建识别目标和视频平面
+        const targetEntity = document.createElement('a-entity');
+        targetEntity.setAttribute('mindar-image-target', 'targetIndex: 0'); // 单目标固定为0
+        const videoPlane = document.createElement('a-plane');
+        videoPlane.src = `#video-${config.id}`;
+        videoPlane.width = config.width;
+        videoPlane.height = config.height;
+        videoPlane.position = '0 0 0';
+        videoPlane.rotation = '0 0 0';
+        videoPlane.className = 'clickable';
+        targetEntity.appendChild(videoPlane);
+        arEntity.appendChild(targetEntity);
+        // 5. 监听识别事件：识别后播放视频
+        targetEntity.addEventListener('targetFound', () => {
+        // 暂停上一个视频
+        if (currentActiveVideo) {
+        currentActiveVideo.pause();
+        currentActiveVideo.muted = true;
+        }
+        // 播放当前视频
+        currentActiveVideo = videoMap[config.id];
+        currentActiveVideo.play();
+        isSoundOn = false;
+        soundBtn.style.display = 'block';
+        soundBtn.innerText = '开启当前声音';
+        });
+        // 6. 监听失去识别事件：暂停视频并静音
+        targetEntity.addEventListener('targetLost', () => {
+        if (currentActiveVideo === videoMap[config.id]) {
+        currentActiveVideo.pause();
+        currentActiveVideo.muted = true;
+        currentActiveVideo = null;
+        isSoundOn = false;
+        soundBtn.style.display = 'none';
+        }
+        });
+        });
+       // 绑定手动启动AR的点击事件（增加DOM存在性判断）
+if (document.getElementById('startARBtn') && document.getElementById('mainARScene')) {
+    document.getElementById('startARBtn').addEventListener('click', function() {
+        this.style.display = 'none'; // 隐藏启动按钮
+        const mainScene = document.getElementById('mainARScene');
+        mainScene.style.display = 'block'; // 显示AR场景
+        // 手动启动所有MindAR实例
+        document.querySelectorAll('[mindar-image]').forEach(entity => {
+            if (entity && entity.components && entity.components['mindar-image']) {
+                entity.components['mindar-image'].start();
+            }
+        });
+    });
+}
+        };
+        // 按钮控制当前识别视频的声音
+        function toggleCurrentSound() {
+        if (!currentActiveVideo) return;
+        isSoundOn = !isSoundOn;
+        currentActiveVideo.muted = !isSoundOn;
+        document.getElementById('currentSoundBtn').innerText = isSoundOn ? '关闭当前声音' : '开启当前声音';
+        }
+        // 点击视频自身控制单个视频的声音
+        function toggleSingleVideo(configId) {
+        const video = videoMap[configId];
+        if (!video) return;
+        video.muted = !video.muted;
+        // 同步声音按钮状态
+        if (currentActiveVideo === video) {
+        isSoundOn = !video.muted;
+        document.getElementById('currentSoundBtn').innerText = isSoundOn ? '关闭当前声音' : '开启当前声音';
+        }
+        }
+    </script>
+</body>
+</html>
