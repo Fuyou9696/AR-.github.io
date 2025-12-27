@@ -35,7 +35,7 @@
             border-radius: 20px;
             display: none;
         }
-        /* 隐藏默认AR场景 */
+        /* AR场景强制显示，取消隐藏 */
         a-scene {
             display: block;
             width: 100vw;
@@ -73,6 +73,10 @@
         const arContainer = document.getElementById('arContainer');
         const soundBtn = document.getElementById('soundBtn');
 
+        // 打印初始化日志，确认DOM加载
+        console.log('页面初始化完成，startBtn是否存在：', startBtn);
+        console.log('MindAR组件是否存在：', arScene.components['mindar-image']);
+
         // 动态创建每个AR的识别目标和视频
         arList.forEach(item => {
         // 创建MindAR识别目标
@@ -97,6 +101,7 @@
 
         // 绑定识别事件
         marker.addEventListener('targetFound', () => {
+        console.log('识别到目标：', item.id);
         // 暂停上一个视频
         if (currentVideo) {
         currentVideo.pause();
@@ -110,6 +115,7 @@
 
         // 绑定失去识别事件
         marker.addEventListener('targetLost', () => {
+        console.log('失去目标：', item.id);
         if (currentVideo === video) {
         currentVideo.pause();
         currentVideo.muted = true;
@@ -122,17 +128,41 @@
         arContainer.appendChild(marker);
         });
 
-        // 手动启动AR
+        // 手动启动AR（添加完整调试日志和权限请求）
         startBtn.addEventListener('click', () => {
+        // 1. 确认按钮点击事件触发
+        console.log('启动AR按钮被点击！');
+        alert('按钮已点击，开始执行启动逻辑');
+
+        // 2. 隐藏按钮，显
         startBtn.style.display = 'none';
         arScene.style.display = 'block';
-        // 延迟启动MindAR，避免DOM未加载
+        // 3. 主动请求相机权限
+        navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+        alert('相机权限请求成功！');
+        console.log('相机权限流：', stream);
+        // 关闭临时流，避免占用相机
+        stream.getTracks().forEach(track => track.stop());
+
+        // 4. 延迟启动MindAR，确保组件加载
         setTimeout(() => {
+        if (arScene.components['mindar-image']) {
+        console.log('MindAR组件存在，开始启动');
         arScene.components['mindar-image'].start();
+        alert('MindAR启动成功，可尝试扫描识别图');
+        } else {
+        console.error('MindAR组件未加载！');
+        alert('错误：MindAR组件未找到，请检查基础库文件');
+        }
         }, 300);
+        })
+        .catch(err => {
+        console.error('相机权限请求失败：', err);
+        alert('相机权限请求失败：' + err.message + '\n请手动在浏览器设置中开启相机权限');
+        });
         });
         };
-
         // 声音控制函数
         function toggleSound() {
         if (!currentVideo) return;
