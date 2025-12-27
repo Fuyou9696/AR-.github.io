@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>扫码播放对应AR视频</title>
+    <!-- 基础库文件：路径对应根目录的js文件 -->
+    <script src="./aframe.min.js"></script>
+    <script src="./mindar-image-aframe.prod.js"></script>
+    <style>
+        /* 当前识别视频的声音按钮：默认隐藏，识别后显示 */
+        #currentSoundBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            padding: 12px 20px;
+            background: rgba(0,0,0,0.7);
+            color: #ffffff;
+            border: none;
+            border-radius: 30px;
+            font-size: 16px;
+            touch-action: manipulation;
+            display: none;
+        }
+        /* 未识别时隐藏视频平面 */
+        [mindar-image-target] a-plane {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        /* 识别到目标后显示对应视频 */
+        [mindar-image-target].active a-plane {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <!-- 声音控制按钮：仅控制当前识别的视频 -->
+    <button id="currentSoundBtn" onclick="toggleCurrentSound()">开启当前声音</button>
+
+    <!-- 主AR场景容器 -->
+    <a-scene id="mainARScene" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false"></a-scene>
+
+    <script>
+        // ########## 核心配置区：新增AR只需在这里加一行 ##########
+        const arConfigList = [
+        // 格式：{ id: 自定义编号, videoSrc: 视频路径, mindSrc: mind路径, width: 平面宽, height: 平面高 }
+        { id: 1, videoSrc: './ar000/asset0.mp4', mindSrc: './ar000/targets.mind', width: 1.736, height: 0.976 },
+        { id: 2, videoSrc: './ar001/asset0.mp4', mindSrc: './ar001/targets.mind', width: 1.736, height: 0.976 },
+        { id: 3, videoSrc: './ar002/asset0.mp4', mindSrc: './ar002/targets.mind', width: 1.736, height: 0.976 },
+        { id: 4, videoSrc: './ar003/asset0.mp4', mindSrc: './ar003/targets.mind', width: 1.736, height: 0.976 },
+        ];
+
+        // 全局变量：记录当前识别的视频
+        let currentActiveVideo = null;
+        let isSoundOn = false;
+        // 存储所有视频元素
+        const videoMap = {};
+
+        // 页面加载后初始化所有AR
+        window.onload = function() {
+        const mainScene = document.getElementById('mainARScene');
+        const soundBtn = document.getElementById('currentSoundBtn');
+
+        // 循环创建每个AR的独立识别场景
+        arConfigList.forEach(config => {
+        // 1. 创建独立的MindAR实体（每个AR一个，互不干扰）
+        const arEntity = document.createElement('a-entity');
+        arEntity.setAttribute('mindar-image', `imageTargetSrc: ${config.mindSrc}; autoStart: true; detectThreshold: 0.6`);
+        mainScene.appendChild(arEntity);
+
+        // 2. 创建资源容器和视频元素
+        const assets = document.createElement('a-assets');
+        const video = document.createElement('video');
+        video.id = `video-${config.id}`;
+        video.src = config.videoSrc;
+        video.loop = true;
+        video.autoplay = true;
+        video.muted = true; // 默认静音
+        // 点击视频自身也能控制声音
+        video.setAttribute('ontouchstart', () => toggleSingleVideo(config.id));
+        assets.appendChild(video);
+        arEntity.appendChild(assets);
+        videoMap[config.id] = video;
+
+        // 3. 创建相机（每个AR独立相机，避免冲突）
+        const camera = document.createElement('a-camera');
+        camera.setAttribute('look-controls', 'enabled: false');
+        camera.setAttribute('cursor', 'fuse: false; rayOrigin: mouse');
+        arEntity.appendChild(camera);
+
+        // 4. 创建识别目标和视频平面
+        const targetEntity = document.createElement('a-entity');
+        targetEntity.setAttribute('mindar-image-target', 'targetIndex: 0'); // 单目标固定为0
+        const videoPlane = document.createElement('a-plane');
+        videoPlane.src = `#video-${config.id}`;
+        videoPlane.width = config.width;
+        videoPlane.height = config.height;
+        videoPlane.position = '0 0 0';
+        videoPlane.rotation = '0 0 0';
+        videoPlane.className = 'clickable';
+        targetEntity.appendChild(videoPlane);
+        arEntity.appendChild(targetEntity);
+
+        // 5. 监听识别/失去识别事件（核心：仅控制当前视频）
+        targetEntity.addEventListener('targetFound', () => {
+        // 失去上一个视频的声音
+        if (currentActiveVideo) {
+        currentActiveVideo.muted = true;
+        }
+        // 记录当前视频
+        currentActiveVideo = videoMap[config.id];
+        isSoundOn = false;
+        soundBtn.style.display = 'block';
+        soundBtn.innerText = '开启当前声音';
+        });
+
+        targetEntity.addEventListener('targetLost', () => {
+        // 失去识别时静音并隐藏按钮
+        if (currentActiveVideo === videoMap[config.id]) {
+        currentActiveVideo.muted = true;
+        currentActiveVideo = null;
+        isSoundOn = false;
+        soundBtn.style.display = 'none';
+        }
+        });
+        });
+        };
+        // 按钮控制当前视频声音
+        function toggleCurrentSound() {
+        if (!currentActiveVideo) return;
+        isSoundOn = !isSoundOn;
+        currentActiveVideo.muted = !isSoundOn;
+        document.getElementById('currentSoundBtn').innerText = isSoundOn ? '关闭当前声音' : '开启当前声音';
+        }
+        // 点击视频自身控制声音
+        function toggleSingleVideo(configId) {
+        const video = videoMap[configId];
+        if (!video) return;
+        video.muted = !video.muted;
+        // 同步按钮状态（如果是当前识别的视频）
+        if (currentActiveVideo === video) {
+        isSoundOn = !video.muted;
+        document.getElementById('currentSoundBtn').innerText = isSoundOn ? '关闭当前声音' : '开启当前声音';
+        }
+        }
+    </script>
+</body>
+</html>
