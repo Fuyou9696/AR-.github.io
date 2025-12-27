@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR扫描播放视频</title>
+    <!-- 基础库文件（GitHub根目录） -->
+    <script src="./aframe.min.js"></script>
+    <script src="./mindar-image-aframe.prod.js"></script>
+    <style>
+        /* 启动按钮样式 */
+        #startBtn {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 999;
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+        }
+        /* 声音按钮样式 */
+        #soundBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 999;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            display: none;
+        }
+        /* 隐藏默认AR场景 */
+        a-scene {
+            display: none;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <!-- 手动启动按钮 -->
+    <button id="startBtn">点击启动AR</button>
+    <!-- 声音控制按钮 -->
+    <button id="soundBtn" onclick="toggleSound()">开启声音</button>
+    <!-- AR场景 -->
+    <a-scene id="arScene" mindar-image="autoStart: false; detectThreshold: 0.6">
+        <!-- 动态生成AR内容的容器 -->
+        <div id="arContainer"></div>
+    </a-scene>
+
+    <script>
+        // 核心配置：仅需修改此处路径，和GitHub仓库一致
+        const arList = [
+        { id: 0, video: './ar000/asset0.mp4', mind: './ar000/targets.mind' },
+        { id: 1, video: './ar001/asset0.mp4', mind: './ar001/targets.mind' },
+        { id: 2, video: './ar002/asset0.mp4', mind: './ar002/targets.mind' },
+        { id: 3, video: './ar003/asset0.mp4', mind: './ar003/targets.mind' }
+        ];
+
+        let currentVideo = null; // 当前播放的视频
+        let isSoundOn = false;   // 声音状态
+
+        // 页面加载完成后初始化
+        window.onload = function() {
+        const startBtn = document.getElementById('startBtn');
+        const arScene = document.getElementById('arScene');
+        const arContainer = document.getElementById('arContainer');
+        const soundBtn = document.getElementById('soundBtn');
+
+        // 动态创建每个AR的识别目标和视频
+        arList.forEach(item => {
+        // 创建MindAR识别目标
+        const marker = document.createElement('a-marker');
+        marker.setAttribute('mindar-image-target', `targetIndex: 0; imageTargetSrc: ${item.mind}`);
+        marker.setAttribute('id', `marker-${item.id}`);
+
+        // 创建视频平面
+        const video = document.createElement('video');
+        video.setAttribute('id', `video-${item.id}`);
+        video.setAttribute('src', item.video);
+        video.setAttribute('loop', 'true');
+        video.setAttribute('muted', 'true');
+        video.style.width = '100%';
+        video.style.height = '100%';
+
+        // 创建视频实体
+        const videoEntity = document.createElement('a-entity');
+        videoEntity.setAttribute('geometry', 'primitive: plane; width: 1; height: 0.5625'); // 16:9比例
+        videoEntity.setAttribute('material', `src: #video-${item.id}; transparent: true`);
+        videoEntity.appendChild(video);
+
+        // 绑定识别事件
+        marker.addEventListener('targetFound', () => {
+        // 暂停上一个视频
+        if (currentVideo) {
+        currentVideo.pause();
+        currentVideo.muted = true;
+        }
+        // 播放当前视频
+        currentVideo = video;
+        currentVideo.play();
+        soundBtn.style.display = 'block';
+        });
+
+        // 绑定失去识别事件
+        marker.addEventListener('targetLost', () => {
+        if (currentVideo === video) {
+        currentVideo.pause();
+        currentVideo.muted = true;
+        currentVideo = null;
+        soundBtn.style.display = 'none';
+        }
+        });
+
+        marker.appendChild(videoEntity);
+        arContainer.appendChild(marker);
+        });
+
+        // 手动启动AR
+        startBtn.addEventListener('click', () => {
+        startBtn.style.display = 'none';
+        arScene.style.display = 'block';
+        // 延迟启动MindAR，避免DOM未加载
+        setTimeout(() => {
+        arScene.components['mindar-image'].start();
+        }, 300);
+        });
+        };
+
+        // 声音控制函数
+        function toggleSound() {
+        if (!currentVideo) return;
+        isSoundOn = !isSoundOn;
+        currentVideo.muted = !isSoundOn;
+        document.getElementById('soundBtn').innerText = isSoundOn ? '关闭声音' : '开启声音';
+        }
+    </script>
+</body>
+</html>
